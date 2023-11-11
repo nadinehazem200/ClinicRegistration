@@ -1,0 +1,12 @@
+/* Sign Up Page Styles */
+h2 {
+  font-size: 24px;
+  margin: 0 0 20px;
+  color: #333;
+}
+
+/* Add your custom styles for the Sign Up form here */
+form {
+  margin-left: 20px; /* Adjust the value as needed */
+  margin-right: 20px; /* Adjust the value as needed */
+}
