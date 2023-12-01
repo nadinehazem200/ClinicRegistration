@@ -1,54 +1,103 @@
 import React, { useState } from "react";
 import "../SignUp/SignUp.css";
+import axios from 'axios';
+import { UserUtils } from "../user.utils";
+import { Navigate } from "react-router-dom";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import { Link } from 'react-router-dom'; // or the appropriate import for your library
+import { useNavigate } from 'react-router-dom';
+
+// ... Other imports ...
+
 const SignUp = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // You can use the form data (name, email, phoneNumber) to make an API call or perform any required validations
-    console.log("Form submitted:", name, email, phoneNumber);
-    setName("");
-    setEmail("");
-    setPhoneNumber("");
-  };
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
+  const navv=useNavigate();
 
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    const form = e.target;
+    const formData = new FormData(form);
+    const formJson = Object.fromEntries(formData.entries());
+
+    console.log(formJson);
+
+    try {
+      const response = await axios.post('http://localhost:3000/signup', {
+        "username": formJson["name"],
+        "password": formJson["password"],
+        "userType": formJson["myRadio"]
+      });
+
+     
+      console.log(response.data);
+
+      UserUtils.curUserId = response.data["id"];
+      UserUtils.curUserRole = response.data["role"];
+
+      console.log(UserUtils.curUserId);
+      console.log(UserUtils.curUserRole);
+      if (formJson["myRadio"] === "patient") {
+        // Navigate to the "patientview" page
+        navv('/patientview');
+      } else {
+          navv('/drview');
+      }
+    } catch (error) {
+      console.error('An error occurred during sign-in:', error.message);
+      // Handle sign-in errors
+    }
+
+
+    console.log("Form submitted:");
+  };
   return (
-    <form onSubmit={handleSubmit}>
+    <div className="signup">
+      <h1>Sign Up</h1>
+    <form method="post" onSubmit={handleSubmit}>
       <label>
-        Name:
+        User Name:
         <input
-          className="form-control"
+          placeholder="username"
+          name="name"
           type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
         />
       </label>
       <br />
       <label>
         Email:
         <input
-          className="form-control"
+          placeholder="email"
           type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          name="email"
         />
       </label>
       <br />
       <label>
-        Phone Number:
+        Password:
         <input
-          className="form-control"
-          type="text"
-          value={phoneNumber}
-          onChange={(e) => setPhoneNumber(e.target.value)}
+          placeholder="password"
+          type="password"
+          name="password"
         />
       </label>
-      <br />
-      <button className="btn mt-3 btn-outline-danger" type="submit">
-        Sign Up
-      </button>
-    </form>
+        Role:
+        <label><input type="radio" className="radioButton" name="myRadio" value="patient" />Patient</label>
+        <label><input type="radio" className="radioButton" name="myRadio" value="doctor" /> Doctor</label>
+        <br />
+        <button type="submit" disabled={loading}>
+          {loading ? 'Signing Up...' : 'Sign Up'}
+        </button>
+        <br></br>
+        <br></br>
+        <p>Already have an account? <Link to="/signin">Sign in</Link></p>
+      </form>
+    </div>
   );
 };
 
