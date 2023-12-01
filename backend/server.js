@@ -1,7 +1,9 @@
 const express = require('express');
 const bodyParser = require('body-parser');
+const cors = require('cors')
 const app = express();
-const port = 6001; // Change this to a different port number
+app.use(cors());
+const port =3000; // Change this to a different port numbersss
 const mysql = require('mysql2');
 app.use(bodyParser.json());
 
@@ -10,7 +12,7 @@ const db = mysql.createConnection({
   host: 'localhost',
   user: 'root',
   password: '12345678',
-  database: 'clinic_reservation',
+  database: 'clinic_reservation3',
 });
 
 // Connect to MySQL
@@ -48,8 +50,9 @@ app.post('/signin', (req, res) => {
     const storedPassword = userResults[0].password;
 
     if (password === storedPassword) {
-      const userType = userResults[0].userType;
-      return res.status(200).json({ message: 'Sign-in successful :)' });
+      const id =userResults[0].id;
+      const role =userResults[0].userType;
+      return res.status(200).json({message: 'Sign-in successful :)',id,role});
     } else {
       return res.status(401).json({ error: 'Invalid credentials , please try again :(' });
     }
@@ -98,8 +101,7 @@ app.post('/signup', (req, res) => {
             console.error('Error executing MySQL query:', updateErr);
             return res.status(500).json({ error: 'Internal Server Error' });
           }
-
-          return res.status(201).json({ message: `Welcome Dear DR, Your user id is: ${insertedUserId}` });
+          return res.status(201).json({ message: `Welcome Dear Patient, Your user id is:`,id:insertedUserId });
         });
       } else if (userType === 'patient') {
         const updatePatientIdQuery = 'INSERT INTO patients (user_id) VALUES (?)';
@@ -108,11 +110,10 @@ app.post('/signup', (req, res) => {
             console.error('Error executing MySQL query:', updateErr);
             return res.status(500).json({ error: 'Internal Server Error' });
           }
-
-          return res.status(201).json({ message: `Welcome Dear Patient, Your user id is: ${insertedUserId}` });
+          return res.status(201).json({ message: `Welcome Dear Patient, Your user id is:`,id:insertedUserId });
         });
       } else {
-        return res.status(201).json({ message:`Welcome Dear DR, Your user id is: ${insertedUserId}` });
+        return res.status(201).json({message: 'Welcome Dear DR, Your user id is:',id:insertedUserId});
       }
     });
   });
@@ -122,74 +123,55 @@ app.post('/signup', (req, res) => {
 
 
 
-// Endpoint for a doctor to set their schedule
-app.post('/dr-schedule', (req, res) => {
-  const { doctorID, SlotDay, SlotTime, patientID } = req.body;
-
-  // Check if doctorID, SlotDay, SlotTime, and patientID are provided
-  if (!doctorID || !SlotDay || !SlotTime || !patientID) {
-    return res.status(400).json({ error: 'doctorID, SlotDay, SlotTime, and patientID are required' });
-  }
-
-  // Check if the slot is available (not already booked)
-  const checkAvailabilityQuery = 'SELECT * FROM dr_schedule WHERE doctorID = ? AND SlotDay = ? AND SlotTime = ? AND patientID IS NULL';
-  db.query(checkAvailabilityQuery, [doctorID, SlotDay, SlotTime], (availabilityErr, availabilityResults) => {
-    if (availabilityErr) {
-      console.error('Error executing MySQL query:', availabilityErr);
-      return res.status(500).json({ error: 'Internal Server Error' });
-    }
-
-    // Check if the slot is available
-    if (availabilityResults.length === 0) {
-      return res.status(409).json({ error: 'Slot is already booked or unavailable' });
-    }
-
-    // Slot is available, proceed to set the appointment for the patient
-    const setAppointmentQuery = 'UPDATE dr_schedule SET patientID = ? WHERE doctorID = ? AND SlotDay = ? AND SlotTime = ?';
-    db.query(setAppointmentQuery, [patientID, doctorID, SlotDay, SlotTime], (updateErr, updateResults) => {
-      if (updateErr) {
-        console.error('Error executing MySQL query:', updateErr);
-        return res.status(500).json({ error: 'Internal Server Error' });
-      }
-
-      return res.status(201).json({ message: 'Appointment scheduled successfully :)' });
-    });
-  });
-});
 
   
 
-  // Endpoint for patients to select a doctor
+// Endpoint for patients to select a doctor
 app.post('/select-doctor', (req, res) => {
-  const { patientName, selectedDrID } = req.body;
+  const { patientID, doctorID } = req.body;
 
-  if (!patientName || !selectedDoctorID) {
-    return res.status(400).json({ error: 'Patient name and selected doctor ID are required' });
+  // Validate input
+  if (!patientID || !doctorID) {
+    return res.status(400).json({ error: 'Patient ID and Doctor ID are required' });
   }
 
-  const query = 'INSERT INTO patients (patientName, selectedDrID) VALUES (?, ?)';
-  db.query(query, [patientName, selectedDrID], (err, results) => {
-    if (err) {
-      console.error('Error executing MySQL query:', err);
+  // Check if the doctor exists
+  db.query('SELECT * FROM doctors WHERE drID = ?', [doctorID], (doctorErr, doctorResults) => {
+    if (doctorErr) {
+      console.error('Error checking doctor:', doctorErr);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
 
-    return res.status(201).json({ message: 'Patient selected doctor successfully' });
+    if (doctorResults.length === 0) {
+      return res.status(404).json({ error: 'Doctor not found' });
+    }
+
+    const selectedDoctor = doctorResults[0];
+    console.log(selectedDoctor)
+
+    // Update the patient's selected doctor
+    db.query(
+      'UPDATE patients SET selDrID = ? WHERE patientID = ?',
+      [selectedDoctor.doctorID, patientID],
+      (updateErr, updateResults) => {
+        if (updateErr) {
+          console.error('Error updating patient:', updateErr);
+          return res.status(500).json({ error: 'Internal Server Error' });
+        }
+
+        return res.status(200).json({ message: 'Doctor selected successfully', selectedDoctor });
+      }
+    );
   });
 });
 
 
 
-
-
-
-
-
-// Endpoint to get a list of doctors
-app.get('/doctors', (req, res) => {
-  db.query('SELECT * FROM doctors', (err, results) => {
+// Endpoint to get a list of appointments from dr_schedule table
+app.get('/doctorsappointments', (req, res) => {
+  db.query('SELECT appid, slotDay, slotTime FROM dr_schedule', (err, results) => {
     if (err) {
-      console.error('Error getting doctors:', err);
+      console.error('Error getting appointments:', err);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
 
@@ -199,12 +181,63 @@ app.get('/doctors', (req, res) => {
 
 
 
-// Endpoint to get available slots for a specific doctor
-app.get('/doctors/:drID/slots', (req, res) => {
+// Endpoint to allow a doctor to set their schedule
+app.post('/dr_schedule', (req, res) => {
+  const { doctorID, slotDay, slotTime } = req.body;
+
+  // Validate input
+  if (!doctorID || !slotDay || !slotTime) {
+    return res.status(400).json({ error: 'Doctor ID, slotDay, and slotTime are required' });
+  }
+
+  // Check if the slot is already taken
+  db.query(
+    'SELECT * FROM dr_schedule WHERE doctorID = ? AND slotDay = ? AND slotTime = ?',
+    [doctorID, slotDay, slotTime],
+    (checkErr, checkResults) => {
+      if (checkErr) {
+        console.error('Error checking schedule:', checkErr);
+        return res.status(500).json({ error: 'Internal Server Error' });
+      }
+
+      if (checkResults.length > 0) {
+        // Slot is already taken
+        return res.status(409).json({ error: 'Slot is already taken' });
+      }
+
+      // Insert the slot into the doctors_schedule table
+      db.query(
+        'INSERT INTO dr_schedule (doctorID, slotDay, slotTime) VALUES (?, ?, ?)',
+        [doctorID, slotDay, slotTime],
+        (insertErr, insertResults) => {
+          if (insertErr) {
+            console.error('Error inserting into schedule:', insertErr);
+            return res.status(500).json({ error: 'Internal Server Error' });
+          }
+
+          return res.status(201).json({ message: 'Slot inserted successfully' });
+        }
+      );
+    }
+  );
+});
+
+
+
+//Endpoint to list available slots of drs
+app.get('/doctors/:doctorID/available-slots', (req, res) => {
   const doctorID = req.params.doctorID;
 
+  // Check if the doctorID is provided
+  if (!doctorID) {
+    return res.status(400).json({ error: 'Doctor ID is required' });
+  }
+
+  console.log('Doctor ID:', doctorID);
+
+  // Retrieve available slots for the specified doctor
   db.query(
-    'SELECT * FROM dr_schedule WHERE doctorID = ? AND booked = false',
+    'SELECT * FROM dr_schedule WHERE doctorID = ? AND appid IS NULL AND SlotDay IS NOT NULL',
     [doctorID],
     (err, results) => {
       if (err) {
@@ -212,69 +245,82 @@ app.get('/doctors/:drID/slots', (req, res) => {
         return res.status(500).json({ error: 'Internal Server Error' });
       }
 
-      return res.status(200).json(results);
+      // Log the results for debugging
+      console.log('Query Results:', results);
+
+      // Check if there are available slots
+      if (results.length === 0) {
+        return res.status(404).json({ error: 'No available slots for this doctor' });
+      }
+
+      // Extract relevant information and send the response
+      const availableSlots = results.map(slot => ({
+        SlotDay: slot.SlotDay,
+        SlotTime: slot.SlotTime,
+      }));
+
+      return res.status(200).json(availableSlots);
     }
   );
 });
 
 
-// Endpoint for patients to choose a slot
-app.post('/appointments', (req, res) => {
-  const { patientName, doctorID, SlotDay, SlotTime} = req.body;
 
-  // Insert the appointment into the appointments table
+
+// End point to create an app
+app.post('/appointments', (req, res) => {
+  const { patientID, doctorID, SlotDay, SlotTime } = req.body;
+
+  // Check if the patient already has an appointment with the same doctor at the same slot time and day
   db.query(
-    'INSERT INTO appointments (patientName, doctorID, SlotDay, SlotTime) VALUES (?, ?, ?, ?)',
-    [patientName, doctorID, SlotDay, SlotTime],
+    'INSERT INTO appointments (patientID, doctorID, SlotDay, SlotTime) ' +
+    'SELECT ?, ?, ?, ? ' +
+    'FROM DUAL ' +
+    'WHERE NOT EXISTS (SELECT * FROM appointments WHERE patientID = ? AND doctorID = ? AND SlotDay = ? AND SlotTime = ?)',
+    [patientID, doctorID, SlotDay, SlotTime, patientID, doctorID, SlotDay, SlotTime],
     (err, results) => {
       if (err) {
         console.error('Error creating appointment:', err);
         return res.status(500).json({ error: 'Internal Server Error' });
       }
 
-      // Update the corresponding slot in the doctor_schedule table
-      db.query(
-        'UPDATE dr_schedule SET booked = true WHERE doctorID = ? AND slotDay = ? AND slotTime = ?',
-        [doctorID, SlotDay, SlotTime],
-        (updateErr, updateResults) => {
-          if (updateErr) {
-            console.error('Error updating doctor schedule:', updateErr);
-            return res.status(500).json({ error: 'Internal Server Error' });
-          }
-
-          return res.status(201).json({ message: 'Appointment created successfully' });
-        }
-      );
-    }
-  );
-});
-
-// Endpoint to update a patient's appointment
-app.put('/appointments/:apptID', (req, res) => {
-  const appID = req.params.appID;
-  const { doctorID, SlotDay, SlotTime } = req.body;
-
-  // Update the appointment in the appointments table
-  db.query(
-    'UPDATE appointments SET doctorID = ?, slotDay = ?, slotTime = ? WHERE appID = ?',
-    [doctorID, SlotDay, SlotTime, appID],
-    (err, results) => {
-      if (err) {
-        console.error('Error updating appointment:', err);
-        return res.status(500).json({ error: 'Internal Server Error' });
+      if (results.affectedRows === 0) {
+        // The patient already has an appointment at the same slot time and day
+        return res.status(400).json({ error: 'Patient already has an appointment at this slot' });
       }
 
-      // Update the corresponding slot in the doctor_schedule table
+      const appointmentId = results.insertId;
+
+      // Fetch the inserted appointment data
       db.query(
-        'UPDATE dr_schedule SET booked = false WHERE doctorID = ? AND slotDay = ? AND slotTime = ?',
-        [doctorID, SlotDay, SlotTime],
-        (updateErr, updateResults) => {
-          if (updateErr) {
-            console.error('Error updating doctor schedule:', updateErr);
+        'SELECT * FROM appointments WHERE appid = ?',
+        [appointmentId],
+        (fetchErr, fetchResults) => {
+          if (fetchErr) {
+            console.error('Error fetching appointment data:', fetchErr);
             return res.status(500).json({ error: 'Internal Server Error' });
           }
 
-          return res.status(200).json({ message: 'Appointment updated successfully' });
+          if (fetchResults.length === 0) {
+            console.error('No data found for the inserted appointment ID:', appointmentId);
+            return res.status(500).json({ error: 'Internal Server Error: No data found for the inserted appointment ID' });
+          }
+
+          const fetchedAppointment = fetchResults[0];
+
+          // Insert the fetched data into the dr_schedule table
+          db.query(
+            'INSERT INTO dr_schedule (doctorID, SlotDay, SlotTime, appid , patientID) VALUES (?, ?, ?, ? , ?)',
+            [fetchedAppointment.doctorID, fetchedAppointment.SlotDay, fetchedAppointment.SlotTime, fetchedAppointment.appid , fetchedAppointment.patientID],
+            (insertErr, insertResults) => {
+              if (insertErr) {
+                console.error('Error inserting data into dr_schedule table:', insertErr);
+                return res.status(500).json({ error: 'Internal Server Error' });
+              }
+
+              return res.status(201).json({ message: 'Appointment created successfully', app });
+            }
+          );
         }
       );
     }
@@ -285,12 +331,15 @@ app.put('/appointments/:apptID', (req, res) => {
 
 // Endpoint to update a patient's appointment
 app.put('/appointments/:appID', (req, res) => {
-  const appID = req.params.appID;
+  //const appID = req.params.appID;
+  const {appID} =req.params;
   const { patientID, doctorID, SlotDay, SlotTime } = req.body;
-
+  console.log({patientID, doctorID, SlotDay, SlotTime })
   // Update the appointment in the appointments table
+  const query = `SELECT * FROM users WHERE id='${patientID}'`
+  console.log(query);
   db.query(
-    'UPDATE appointments SET patientID = ?, doctorID = ?, SlotDay = ?, SlotTime = ? WHERE appID = ?',
+    `UPDATE appointments SET patientID = '${patientID}', doctorID = '${doctorID}', SlotDay = '${SlotDay}', SlotTime = '${SlotTime}' WHERE appID = '${appID}'`,
     [patientID, doctorID, SlotDay, SlotTime, appID],
     (err, results) => {
       if (err) {
@@ -300,14 +349,14 @@ app.put('/appointments/:appID', (req, res) => {
 
       // Update the corresponding slot in the dr_schedule table
       db.query(
-        'UPDATE dr_schedule SET booked = false WHERE doctorID = ? AND slotDay = ? AND slotTime = ?',
-        [doctorID, SlotDay, SlotTime],
+        'UPDATE dr_schedule SET appID = ? WHERE doctorID = ? AND slotDay = ? AND slotTime = ?',
+        [appID, doctorID, SlotDay, SlotTime],
         (updateErr, updateResults) => {
           if (updateErr) {
             console.error('Error updating doctor schedule:', updateErr);
             return res.status(500).json({ error: 'Internal Server Error' });
           }
-
+      
           return res.status(200).json({ message: 'Appointment updated successfully' });
         }
       );
@@ -317,7 +366,7 @@ app.put('/appointments/:appID', (req, res) => {
 
 
 
-
+//End point to delete an app
 app.delete('/appointments/:appID', (req, res) => {
   const appID = req.params.appID;
 
@@ -338,41 +387,36 @@ app.delete('/appointments/:appID', (req, res) => {
       return res.status(404).json({ error: 'Appointment not found' });
     }
 
-    // Check if the appointment is already canceled
-    if (checkResults[0].canceled) {
-      return res.status(409).json({ error: 'Appointment is already canceled' });
-    }
-
-    // Delete the appointment from the appointments table
-    db.query('UPDATE appointments SET canceled = true WHERE appID = ?', [appID], (err, results) => {
-      if (err) {
-        console.error('Error canceling appointment:', err);
-        return res.status(500).json({ error: 'Internal Server Error' });
-      }
-
-      // Retrieve the details of the canceled appointment if needed
-      const canceledAppointment = results.affectedRows === 1 ? { appID } : null;
-
-      // Update the corresponding slot in the dr_schedule table
-      db.query(
-        'UPDATE dr_schedule SET booked = false WHERE doctorID = ?',
-        [appID],
-        (updateErr, updateResults) => {
-          if (updateErr) {
-            console.error('Error updating doctor schedule:', updateErr);
-            return res.status(500).json({ error: 'Internal Server Error' });
-          }
-
-          return res.status(200).json({
-            message: 'Appointment canceled successfully',
-            canceledAppointment,
-          });
+    // Get the details of the canceled appointment
+    const canceledAppointment = checkResults[0];
+    db.query(
+      'DELETE FROM dr_schedule WHERE appid = ?',
+      [appID],
+      (deleteErr, deleteResults) => {
+        if (deleteErr) {
+          console.error('Error deleting from doctor schedule:', deleteErr);
+          return res.status(500).json({ error: 'Internal Server Error' });
         }
-      );
-    });
+
+        return res.status(200).json({
+          message: 'Appointment canceled successfully',
+          canceledAppointment,
+        });
+      }
+    );
+
+    db.query(
+      'DELETE FROM appointments WHERE appID = ?',
+      [appID],
+      (deleteAppointmentErr, deleteAppointmentResults) => {
+        if (deleteAppointmentErr) {
+          console.error('Error deleting appointment:', deleteAppointmentErr);
+          return res.status(500).json({ error: 'Internal Server Error' });
+        }       
+      }
+    );
   });
 });
-
 
 
 
