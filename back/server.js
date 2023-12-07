@@ -3,17 +3,27 @@ const bodyParser = require('body-parser');
 const cors = require('cors')
 const app = express();
 app.use(cors());
-const port =3000; // Change this to a different port numbersss
+//const port =3000; // Change this to a different port numbersss
+
+require('dotenv').config();
+const port = process.env.PORT;
 const mysql = require('mysql2');
 app.use(bodyParser.json());
 
 // Check MySQL connection
+// const db = mysql.createConnection({
+//   host: 'bwibwlhviwmvs2e0nfwh-mysql.services.clever-cloud.com',
+//   user: 'upe09nhacjrgn040',
+//   password: 'VFfJNOgbjekI6dHLTqRJ',
+//   database: 'bwibwlhviwmvs2e0nfwh',
+// });
 const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root',
-  password: '12345678',
-  database: 'clinic_reservation3',
+  host: process.env.DB_Host,
+  user: process.env.DB_User,
+  password: process.env.DB_Pass,
+  database: process.env.DB_Name,
 });
+
 
 // Connect to MySQL
 db.connect((err) => {
@@ -118,8 +128,6 @@ app.post('/signup', (req, res) => {
     });
   });
 });
-
-
 
 
 
